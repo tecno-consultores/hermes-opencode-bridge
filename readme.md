@@ -41,3 +41,36 @@ services:
     depends_on:
       opencode:
         condition: service_started
+```
+
+## 🔌 Integración con Hermes TUI
+
+Para que Hermes reconozca y utilice este orquestador de manera autónoma, inyecta la siguiente instrucción en tu archivo de sistema (por ejemplo, `~/.hermes/SOUL.md` o tu prompt principal):
+
+```markdown
+## Herramienta Externa Disponible: OpenCode Orchestrator
+Tienes acceso a una herramienta de programación automatizada mediante una API local. Siempre que el usuario te pida programar, crear un script o ejecutar tareas en el workspace, debes invocarla haciendo una petición HTTP POST.
+
+- **URL:** `http://acp-orchestrator:8000/v1/agent/task`
+- **Método:** `POST`
+- **Headers:** `Content-Type: application/json`
+- **Payload:** `{"instruction": "<instrucción detallada para OpenCode>"}`
+```
+
+## 🧪 Prueba Manual (cURL)
+
+Puedes probar que el puente está activo y comunicándose con OpenCode enviando una petición directa:
+
+```bash
+curl -s -X POST http://localhost:8000/v1/agent/task \
+  -H "Content-Type: application/json" \
+  -d '{"instruction": "Ejecuta ps aux en la terminal y dime cuántos procesos hay"}'
+```
+
+**Respuesta Esperada:**
+```json
+{
+  "status": "success",
+  "response": "Hay 5 procesos activos en el sistema..."
+}
+```

@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Made by Sinfallas <sinfallas@yahoo.com>
+# Licence: GPL-2
+
+if [[ "$EUID" = "0" ]]; then
+	echo -e "\e[00;31mERROR: NO debe ser root.\e[00m"
+	exit 1
+fi
+
+clear
+docker buildx create --name container-builder --driver docker-container --bootstrap --use
+docker buildx build --builder=container-builder --platform linux/arm64,linux/amd64 --cache-to type=local,dest=./.buildx-cache,mode=max --cache-from type=local,src=./.buildx-cache --push -t sinfallas/hermes-opencode-bridge:latest -f Dockerfile .
+docker buildx rm container-builder
+docker system prune -af
+docker builder prune -af
+docker buildx prune -af
+
+echo "finalizado..."
+exit 0
