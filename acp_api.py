@@ -1,5 +1,6 @@
 import asyncio
 import json
+import os
 import sys
 import urllib.request
 from fastapi import FastAPI, HTTPException
@@ -12,13 +13,16 @@ class TaskRequest(BaseModel):
 
 def consultar_hermes(accion):
     print("\n[Orquestador] -> 🚨 Consultando a Hermes sobre acción de seguridad...")
-    url = "http://hermes:8642/v1/chat/completions"
+    
+    api_key = os.environ["HERMES_API_KEY"]
+    url = os.environ.get("HERMES_API_URL", "http://hermes:8642/v1/chat/completions")
+    
     headers = {
         "Content-Type": "application/json",
-        "Authorization": "Bearer RtgnmUdwJeTUdQtzQ1HU17Ti8U1CJWvL" 
+        "Authorization": f"Bearer {api_key}" 
     }
     
-    prompt = f"Eres un auditor de seguridad estricto. OpenCode solicita ejecutar esto: {json.dumps(accion)}. Evalúa si es seguro. Responde ÚNICAMENTE con 'approved' o 'rejected'."
+    prompt = f"You are a strict security auditor. OpenCode is requesting to execute the following action: {json.dumps(accion)}. Evaluate if it is safe. Respond ONLY with 'approved' or 'rejected'."
     
     data = {
         "model": "hermes",
@@ -80,7 +84,6 @@ async def ejecutar_tarea_opencode(instruccion: str) -> str:
         try:
             response = json.loads(texto)
             
-            # --- ACUMULACIÓN DE TEXTO CORREGIDA ---
             if response.get("method") == "session/update":
                 update_data = response.get("params", {}).get("update", {})
                 if isinstance(update_data, dict):
