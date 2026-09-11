@@ -3,7 +3,7 @@ import json
 import os
 import sys
 import urllib.request
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 
 app = FastAPI(title="Orquestador ACP Hermes-OpenCode")
@@ -141,10 +141,24 @@ async def ejecutar_tarea_opencode(instruccion: str) -> str:
 
     return respuesta_final.strip()
 
-@app.post("/v1/agent/task")
-async def execute_task(request: TaskRequest):
+async def background_opencode_task(instruccion: str):
+    """Ejecuta OpenCode en segundo plano y muestra el resultado en consola."""
     try:
-        resultado = await ejecutar_tarea_opencode(request.instruction)
-        return {"status": "success", "response": resultado}
+        resultado = await ejecutar_tarea_opencode(instruccion)
+        print(f"\n[Orquestador] ✅ Tarea finalizada con éxito. Resultado de OpenCode:\n{resultado}\n")
+    except Exception as e:
+        print(f"\n[Orquestador] ❌ Error ejecutando la tarea en segundo plano: {e}\n")
+
+@app.post("/v1/agent/task")
+async def execute_task(request: TaskRequest, background_tasks: BackgroundTasks):
+    try:
+        # Encola la tarea de OpenCode para que FastAPI la corra de fondo
+        background_tasks.add_task(background_opencode_task, request.instruction)
+        
+        # Responde inmediatamente a Hermes para liberar el curl
+        return {
+            "status": "success", 
+            "response": "Tarea delegada y ejecutándose en segundo plano. OpenCode te consultará permisos si lo requiere."
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
