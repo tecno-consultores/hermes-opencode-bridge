@@ -1,6 +1,5 @@
 # Hermes-OpenCode Bridge 🌉🤖
 
-[![Docker Pulls](https://img.shields.io/docker/pulls/sinfallas/hermes-opencode-bridge)](https://hub.docker.com/r/sinfallas/hermes-opencode-bridge)
 [![Python & FastAPI](https://img.shields.io/badge/Python-3.11%20|%20FastAPI-blue)](https://fastapi.tiangolo.com/)
 
 Un microservicio ultrarrápido construido con FastAPI y `uv` que funciona como orquestador y puente de comunicación entre **Hermes (Agente Manager)** y **OpenCode (Agente Worker)**. 
@@ -74,3 +73,4 @@ curl -s -X POST http://localhost:8000/v1/agent/task \
   "response": "Hay 5 procesos activos en el sistema..."
 }
 ```
+Obtener la imagen en Docker Hub: https://hub.docker.com/r/sinfallas/hermes-opencode-bridge
