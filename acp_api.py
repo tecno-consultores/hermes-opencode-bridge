@@ -33,7 +33,7 @@ def consultar_hermes(accion):
     
     req = urllib.request.Request(url, data=json.dumps(data).encode('utf-8'), headers=headers)
     try:
-        with urllib.request.urlopen(req) as response:
+        with urllib.request.urlopen(req, timeout=10) as response:
             res = json.loads(response.read().decode('utf-8'))
             decision = "approved" if "approved" in res['choices'][0]['message']['content'].strip().lower() else "rejected"
             print(f"[Hermes] -> 🧠 Decisión: {decision.upper()}\n")
