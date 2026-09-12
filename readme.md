@@ -8,6 +8,12 @@ Un microservicio ultrarrápido construido con FastAPI y `uv` que funciona como s
 
 Esta nueva arquitectura resuelve los bloqueos de interfaz ("abrazos mortales") procesando las tareas pesadas en segundo plano. El puente expone la herramienta `delegar_a_opencode` nativamente a través de MCP (vía SSE), permitiendo a Hermes delegar tareas de programación y ejecución en terminal dentro de un entorno Dockerizado (`/workspace`), manteniendo una **capa de auditoría de seguridad interactiva**.
 
+Para ejecutar la integracion completa ejecuta el siguiente comando:
+
+```bash
+docker compose -f docker-compose.yml --env-file env.example --profile acp-orchestrator --profile hermes --profile opencode up -d
+```
+
 ## ✨ Características Principales
 
 * **Protocolo MCP Híbrido (SSE):** Soporte total para la especificación Model Context Protocol con aislamiento de sesiones (UUID) y ruteo a prueba de fallos, compatible con versiones estrictas del SDK de NousResearch.
