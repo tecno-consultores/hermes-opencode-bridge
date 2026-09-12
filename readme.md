@@ -2,6 +2,8 @@
 
 [![Python & FastAPI](https://img.shields.io/badge/Python-3.11%20|%20FastAPI-blue)](https://fastapi.tiangolo.com/)
 
+Esta imagen fue diseñada para trabajar dentro del proyecto: https://github.com/tecno-consultores/llm-lab
+
 Un microservicio ultrarrápido construido con FastAPI y `uv` que funciona como servidor nativo **Model Context Protocol (MCP)** y puente de comunicación asíncrona entre **Hermes (Agente Manager)** y **OpenCode (Agente Worker)**. 
 
 Esta nueva arquitectura resuelve los bloqueos de interfaz ("abrazos mortales") procesando las tareas pesadas en segundo plano. El puente expone la herramienta `delegar_a_opencode` nativamente a través de MCP (vía SSE), permitiendo a Hermes delegar tareas de programación y ejecución en terminal dentro de un entorno Dockerizado (`/workspace`), manteniendo una **capa de auditoría de seguridad interactiva**.
