@@ -11,6 +11,10 @@ app = FastAPI(title="Orquestador ACP Hermes-OpenCode - BULLETPROOF")
 
 active_sse_queue = None
 
+@app.get("/health")
+async def health_check():
+    return {"status": "ok"}
+
 class TaskRequest(BaseModel):
     instruction: str
 
