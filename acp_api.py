@@ -13,24 +13,24 @@ class TaskRequest(BaseModel):
 
 def consultar_hermes(accion):
     print("\n[Orquestador] -> 🚨 Consultando a Hermes sobre acción de seguridad...")
-    
+
     api_key = os.environ["HERMES_API_KEY"]
     url = os.environ.get("HERMES_API_URL", "http://hermes:8642/v1/chat/completions")
-    
+
     headers = {
         "Content-Type": "application/json",
-        "Authorization": f"Bearer {api_key}" 
+        "Authorization": f"Bearer {api_key}"
     }
-    
+
     prompt = f"You are a strict security auditor. OpenCode is requesting to execute the following action: {json.dumps(accion)}. Evaluate if it is safe. Respond ONLY with 'approved' or 'rejected'."
-    
+
     data = {
         "model": "hermes",
         "messages": [{"role": "user", "content": prompt}],
         "max_tokens": 10,
         "temperature": 0.1
     }
-    
+
     req = urllib.request.Request(url, data=json.dumps(data).encode('utf-8'), headers=headers)
     try:
         with urllib.request.urlopen(req, timeout=10) as response:
@@ -44,14 +44,14 @@ def consultar_hermes(accion):
 
 async def ejecutar_tarea_opencode(instruccion: str) -> str:
     print(f"\n🚀 Iniciando tarea: {instruccion}")
-    
+
     process = await asyncio.create_subprocess_exec(
         "docker", "exec", "-i", "opencode", "opencode", "acp",
         stdin=asyncio.subprocess.PIPE,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.DEVNULL
     )
-    
+
     # 1. Inicialización
     handshake = {
         "jsonrpc": "2.0", "method": "initialize",
@@ -61,7 +61,7 @@ async def ejecutar_tarea_opencode(instruccion: str) -> str:
     process.stdin.write((json.dumps(handshake) + "\n").encode('utf-8'))
     await process.stdin.drain()
     await process.stdout.readline()
-    
+
     # 2. Confirmación
     process.stdin.write((json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"}) + "\n").encode('utf-8'))
     await process.stdin.drain()
@@ -75,15 +75,15 @@ async def ejecutar_tarea_opencode(instruccion: str) -> str:
     await process.stdin.drain()
 
     respuesta_final = ""
-    
+
     while True:
         linea = await process.stdout.readline()
         if not linea: break
-            
+
         texto = linea.decode('utf-8').strip()
         try:
             response = json.loads(texto)
-            
+
             if response.get("method") == "session/update":
                 update_data = response.get("params", {}).get("update", {})
                 if isinstance(update_data, dict):
@@ -92,7 +92,7 @@ async def ejecutar_tarea_opencode(instruccion: str) -> str:
                         content = update_data.get("content", {})
                         if isinstance(content, dict) and "text" in content:
                             respuesta_final += content["text"]
-            
+
             # --- ENVÍO DEL PROMPT ---
             if response.get("id") == 2 and "result" in response:
                 session_id = response["result"].get("sessionId")
@@ -129,15 +129,15 @@ async def ejecutar_tarea_opencode(instruccion: str) -> str:
                 }
                 process.stdin.write((json.dumps(aprobacion) + "\n").encode('utf-8'))
                 await process.stdin.drain()
-            
+
             # --- CONDICIÓN DE SALIDA ---
             if response.get("id") == 3 and "result" in response:
                 if response["result"].get("stopReason") == "end_turn":
                     process.terminate()
                     break
-                
+
         except json.JSONDecodeError:
-            pass 
+            pass
 
     return respuesta_final.strip()
 
@@ -154,10 +154,10 @@ async def execute_task(request: TaskRequest, background_tasks: BackgroundTasks):
     try:
         # Encola la tarea de OpenCode para que FastAPI la corra de fondo
         background_tasks.add_task(background_opencode_task, request.instruction)
-        
+
         # Responde inmediatamente a Hermes para liberar el curl
         return {
-            "status": "success", 
+            "status": "success",
             "response": "Tarea delegada y ejecutándose en segundo plano. OpenCode te consultará permisos si lo requiere."
         }
     except Exception as e:
