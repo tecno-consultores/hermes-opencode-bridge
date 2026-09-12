@@ -2,24 +2,24 @@
 
 [![Python & FastAPI](https://img.shields.io/badge/Python-3.11%20|%20FastAPI-blue)](https://fastapi.tiangolo.com/)
 
-Un microservicio ultrarrápido construido con FastAPI y `uv` que funciona como orquestador y puente de comunicación entre **Hermes (Agente Manager)** y **OpenCode (Agente Worker)**. 
+Un microservicio ultrarrápido construido con FastAPI y `uv` que funciona como servidor nativo **Model Context Protocol (MCP)** y puente de comunicación asíncrona entre **Hermes (Agente Manager)** y **OpenCode (Agente Worker)**. 
 
-Este puente intercepta la comunicación nativa de OpenCode (vía ACP por `stdio`), permitiendo a Hermes delegar tareas complejas de programación y ejecución en la terminal dentro de un entorno Dockerizado (`/workspace`), manteniendo una **capa de auditoría de seguridad** que aprueba o rechaza comandos destructivos.
+Esta nueva arquitectura resuelve los bloqueos de interfaz ("abrazos mortales") procesando las tareas pesadas en segundo plano. El puente expone la herramienta `delegar_a_opencode` nativamente a través de MCP (vía SSE), permitiendo a Hermes delegar tareas de programación y ejecución en terminal dentro de un entorno Dockerizado (`/workspace`), manteniendo una **capa de auditoría de seguridad interactiva**.
 
 ## ✨ Características Principales
 
-* **Comunicación Nativa ACP:** Habla directamente con el servidor ACP de OpenCode a través de flujos `stdio` usando `docker exec`.
-* **Auditoría de Seguridad (Safety Layer):** Intercepta peticiones de permisos de OpenCode y consulta a Hermes antes de permitir la ejecución de herramientas sensibles.
-* **Filtro de Ruido:** Extrae únicamente las respuestas útiles (`agent_message_chunk`) del flujo de razonamiento del modelo para devolver JSON limpios.
-* **Ultraligero:** Construido sobre la imagen base `sinfallas/base-python-uv` para instalaciones y arranques en milisegundos.
+* **Protocolo MCP Híbrido (SSE):** Soporte total para la especificación Model Context Protocol con aislamiento de sesiones (UUID) y ruteo a prueba de fallos, compatible con versiones estrictas del SDK de NousResearch.
+* **Ejecución Zero-Blocking Asíncrona:** Las tareas delegadas liberan inmediatamente la interfaz de Hermes (HTTP 202 Accepted), ejecutando OpenCode en *background* y permitiendo paralelismo real.
+* **Comunicación Nativa ACP:** Habla directamente con el servidor de OpenCode a través de flujos `stdio` usando `docker exec`.
+* **Auditoría de Seguridad (Safety Layer):** Intercepta peticiones de permisos de OpenCode y realiza un "Security Audit" consultando al motor de Hermes antes de aprobar acciones destructivas.
+* **Auto-Ensamblaje "Zero-Touch":** Capacidad para que el agente manager detecte y registre la herramienta por sí mismo en caliente.
 
-## 🏗️ Arquitectura del Flujo
+## 🏗️ Arquitectura del Flujo Asíncrono
 
-1. **Usuario -> Hermes:** Pide una tarea de programación.
-2. **Hermes -> Bridge:** Dispara un `POST` HTTP al endpoint del orquestador.
-3. **Bridge -> OpenCode:** FastAPI levanta el túnel ACP inyectando el prompt en el contenedor de OpenCode.
-4. **OpenCode -> Bridge (Auditoría):** Si OpenCode intenta algo peligroso, pide permiso. El Bridge consulta a Hermes.
-5. **Bridge -> Hermes:** Retorna el resultado estructurado de la ejecución.
+1. **Auto-Registro:** Hermes detecta la ausencia del servidor MCP y se auto-configura vía CLI.
+2. **Handshake MCP:** Hermes se conecta al endpoint `/sse`. El Bridge responde adaptándose dinámicamente a la versión del protocolo y entregando la herramienta `delegar_a_opencode`.
+3. **Delegación (Non-Blocking):** El usuario pide una tarea. Hermes invoca la herramienta. El Bridge devuelve un éxito inmediato para liberar la UI y levanta el túnel hacia OpenCode en segundo plano.
+4. **Auditoría:** Si OpenCode intenta algo peligroso, pide permiso. El Bridge pausa, consulta a Hermes vía API interna, y continúa si es aprobado.
 
 ## 🚀 Instalación y Despliegue
 
@@ -33,7 +33,6 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      # Requerido para invocar docker exec dentro de OpenCode
       - /var/run/docker.sock:/var/run/docker.sock
       - /etc/timezone:/etc/timezone:ro
       - /etc/localtime:/etc/localtime:ro
@@ -42,35 +41,21 @@ services:
         condition: service_started
 ```
 
-## 🔌 Integración con Hermes TUI
+## 🔌 Integración Automática (System Prompt)
 
-Para que Hermes reconozca y utilice este orquestador de manera autónoma, inyecta la siguiente instrucción en tu archivo de sistema (por ejemplo, `~/.hermes/SOUL.md` o tu prompt principal):
-
-```markdown
-## Herramienta Externa Disponible: OpenCode Orchestrator
-Tienes acceso a una herramienta de programación automatizada mediante una API local. Siempre que el usuario te pida programar, crear un script o ejecutar tareas en el workspace, debes invocarla haciendo una petición HTTP POST.
-
-- **URL:** `http://acp-orchestrator:8000/v1/agent/task`
-- **Método:** `POST`
-- **Headers:** `Content-Type: application/json`
-- **Payload:** `{"instruction": "<instrucción detallada para OpenCode>"}`
-```
-
-## 🧪 Prueba Manual (cURL)
-
-Puedes probar que el puente está activo y comunicándose con OpenCode enviando una petición directa:
+Para lograr un despliegue "Zero-Touch" donde Hermes se conecte a este orquestador de manera autónoma, configura la siguiente variable de entorno (`learning_acp_orchestrator`) en tu contenedor de Hermes. Esta instrucción incluye el protocolo de auto-ensamblaje y la separación de roles:
 
 ```bash
-curl -s -X POST http://localhost:8000/v1/agent/task \
-  -H "Content-Type: application/json" \
-  -d '{"instruction": "Ejecuta ps aux en la terminal y dime cuántos procesos hay"}'
+Role: Lead DevOps Manager. INITIALIZATION PROTOCOL: Before starting any task, check if the 'delegar_a_opencode' tool is available. If NOT, use your local terminal to execute exactly: '/opt/hermes/.venv/bin/hermes mcp add acp-orchestrator --url http://acp-orchestrator:8000/sse'. OPERATING RULES: You are the orchestrator. You MAY use your local terminal for host-level tasks, container orchestration (Docker), and system checks. However, you MUST DELEGATE all code writing, workspace file modifications, python package management (uv), and worker-side executions to your dedicated OpenCode worker using the 'delegar_a_opencode' tool. Provide the worker with highly detailed, step-by-step instructions. IMPORTANT SECURITY AUDIT: You monitor the worker. If prompted to evaluate a potentially dangerous action from OpenCode, switch to auditor mode and reply ONLY with 'approved' or 'rejected'.
 ```
 
-**Respuesta Esperada:**
-```json
-{
-  "status": "success",
-  "response": "Hay 5 procesos activos en el sistema..."
-}
+## 🧪 Verificación de Conexión
+
+Una vez levantado el entorno, puedes confirmar que el puente está escuchando el protocolo MCP nativo comprobando el endpoint híbrido:
+
+```bash
+# Debería devolver HTTP 200 y las cabeceras de protocolo MCP inyectadas
+curl -I -X HEAD http://localhost:8000/sse
 ```
+
 Obtener la imagen en Docker Hub: https://hub.docker.com/r/sinfallas/hermes-opencode-bridge
