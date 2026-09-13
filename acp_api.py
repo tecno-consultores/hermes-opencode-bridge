@@ -1,15 +1,17 @@
 import asyncio
 import json
 import os
-import urllib.request
+import uuid
+import httpx
 from fastapi import FastAPI, BackgroundTasks, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-from sse_starlette.sse import EventSourceResponse
+from sse_starlette import EventSourceResponse
 
 app = FastAPI(title="Orquestador ACP Hermes-OpenCode - BULLETPROOF")
 
-active_sse_queue = None
+# Diccionario para mapear múltiples colas SSE de forma independiente
+active_sse_queues = {}
 
 @app.get("/health")
 async def health_check():
@@ -18,18 +20,29 @@ async def health_check():
 class TaskRequest(BaseModel):
     instruction: str
 
-def consultar_hermes(accion):
+async def consultar_hermes(accion):
     print("\n[Orquestador] -> 🚨 Consultando a Hermes sobre acción de seguridad...")
-    api_key = os.environ["HERMES_API_KEY"]
+    api_key = os.environ.get("HERMES_API_KEY", "")
     url = os.environ.get("HERMES_API_URL", "http://hermes:8642/v1/chat/completions")
     headers = {"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"}
-    prompt = f"You are a strict security auditor. OpenCode is requesting to execute the following action: {json.dumps(accion)}. Evaluate if it is safe. Respond ONLY with 'approved' or 'rejected'."
+    
+    # Extracción de la directiva de seguridad a una variable de entorno
+    base_prompt = os.environ.get(
+        "HERMES_SECURITY_PROMPT", 
+        "You are a strict security auditor. OpenCode is requesting to execute the following action: {accion}. Evaluate if it is safe. Respond ONLY with 'approved' or 'rejected'."
+    )
+    prompt = base_prompt.format(accion=json.dumps(accion))
+    
     data = {"model": "hermes", "messages": [{"role": "user", "content": prompt}], "max_tokens": 10, "temperature": 0.1}
-    req = urllib.request.Request(url, data=json.dumps(data).encode('utf-8'), headers=headers)
+    
+    # Utilización de httpx para transporte asíncrono nativo sin bloquear el hilo principal
     try:
-        with urllib.request.urlopen(req, timeout=10) as response:
-            res = json.loads(response.read().decode('utf-8'))
-            decision = "approved" if "approved" in res['choices'][0]['message']['content'].strip().lower() else "rejected"
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(url, json=data, headers=headers)
+            response.raise_for_status()
+            res = response.json()
+            content = res['choices'][0]['message']['content'].strip().lower()
+            decision = "approved" if "approved" in content else "rejected"
             print(f"[Hermes] -> 🧠 Decisión: {decision.upper()}\n")
             return decision
     except Exception as e:
@@ -83,7 +96,7 @@ async def ejecutar_tarea_opencode(instruccion: str) -> str:
                         params_permiso = update_data
 
             if permiso_solicitado:
-                decision = await asyncio.to_thread(consultar_hermes, params_permiso)
+                decision = await consultar_hermes(params_permiso)
                 process.stdin.write((json.dumps({"jsonrpc": "2.0", "result": decision, "id": response.get("id")}) + "\n").encode('utf-8'))
                 await process.stdin.drain()
 
@@ -108,34 +121,37 @@ async def background_opencode_task(instruccion: str):
 # ==========================================
 @app.api_route("/sse", methods=["GET", "POST", "HEAD"])
 async def sse_bulletproof(request: Request, background_tasks: BackgroundTasks):
-    global active_sse_queue
-    
-    # 1. Extraemos su versión caprichosa y se la inyectamos a TODAS nuestras respuestas
     client_version = request.headers.get("mcp-protocol-version", "2024-11-05")
     res_headers = {"mcp-protocol-version": client_version}
 
     if request.method == "HEAD":
         return Response(status_code=200, headers=res_headers)
 
-    # 2. Manejo de conexión SSE Clásica (Por si recapacita)
+    # Manejo de conexión SSE mediante aislamiento de sesiones
     if request.method == "GET":
-        active_sse_queue = asyncio.Queue()
+        session_id = str(uuid.uuid4())
+        active_sse_queues[session_id] = asyncio.Queue()
+        
         async def event_stream():
             try:
-                yield {"event": "endpoint", "data": str(request.url)}
+                # Transmisión del identificador de sesión para enrutamiento de comandos POST
+                yield {"event": "endpoint", "data": f"{str(request.url)}?session_id={session_id}"}
                 while True:
                     if await request.is_disconnected():
                         break
                     try:
-                        msg = await asyncio.wait_for(active_sse_queue.get(), timeout=1.0)
+                        msg = await asyncio.wait_for(active_sse_queues[session_id].get(), timeout=1.0)
                         yield {"event": "message", "data": json.dumps(msg)}
                     except asyncio.TimeoutError:
                         continue
             except asyncio.CancelledError:
                 pass
+            finally:
+                active_sse_queues.pop(session_id, None)
+                
         return EventSourceResponse(event_stream(), headers=res_headers)
 
-    # 3. Manejo de Comandos (POST)
+    # Manejo de Comandos (POST)
     if request.method == "POST":
         try:
             data = await request.json()
@@ -189,10 +205,9 @@ async def sse_bulletproof(request: Request, background_tasks: BackgroundTasks):
             }
 
         if respuesta:
-            # MAGIA HÍBRIDA: Lo enviamos por la cola SSE (si existe) 
-            # y también lo devolvemos directo en el POST. Cubrimos el 100% de los casos.
-            if active_sse_queue:
-                await active_sse_queue.put(respuesta)
+            session_id = request.query_params.get("session_id")
+            if session_id and session_id in active_sse_queues:
+                await active_sse_queues[session_id].put(respuesta)
                 
             return JSONResponse(content=respuesta, status_code=200, headers=res_headers)
 
