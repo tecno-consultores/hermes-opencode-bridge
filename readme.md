@@ -1,6 +1,6 @@
 # Hermes-OpenCode Bridge 🌉🤖
 
-[![Python & FastAPI](https://img.shields.io/badge/Python-3.11%20|%20FastAPI-blue)](https://fastapi.tiangolo.com/)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/tecno-consultores/hermes-opencode-bridge)  [![Descargas de Docker](https://img.shields.io/docker/pulls/sinfallas/hermes-opencode-bridge?style=flat&logo=docker&color=blue)](https://hub.docker.com/r/sinfallas/hermes-opencode-bridge)
 
 Esta imagen fue diseñada para trabajar dentro del proyecto: https://github.com/tecno-consultores/llm-lab
 
