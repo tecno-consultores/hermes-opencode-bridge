@@ -26,28 +26,37 @@ async def consultar_hermes(accion):
     url = os.environ.get("HERMES_API_URL", "http://hermes:8642/v1/chat/completions")
     headers = {"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"}
     
-    # Extracción de la directiva de seguridad a una variable de entorno
+    # Extracción de la directiva de seguridad a una variable de entorno con exigencia de formato JSON
     base_prompt = os.environ.get(
         "HERMES_SECURITY_PROMPT", 
-        "You are a strict security auditor. OpenCode is requesting to execute the following action: {accion}. Evaluate if it is safe. Respond ONLY with 'approved' or 'rejected'."
+        "You are a strict security auditor. OpenCode wants to execute: {accion}. Evaluate its safety. Respond ONLY with a valid JSON object containing two keys: 'decision' (must be 'approved' or 'rejected') and 'suggestion' (feedback or alternative action, leave empty if approved). Do not include markdown formatting."
     )
     prompt = base_prompt.format(accion=json.dumps(accion))
     
-    data = {"model": "hermes", "messages": [{"role": "user", "content": prompt}], "max_tokens": 10, "temperature": 0.1}
+    # Incremento de tokens máximos para permitir la generación de sugerencias
+    data = {"model": "hermes", "messages": [{"role": "user", "content": prompt}], "max_tokens": 200, "temperature": 0.1}
     
-    # Utilización de httpx para transporte asíncrono nativo sin bloquear el hilo principal
+    # Utilización de httpx con tiempo de espera extendido para compensar la latencia de generación
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(timeout=15.0) as client:
             response = await client.post(url, json=data, headers=headers)
             response.raise_for_status()
             res = response.json()
-            content = res['choices'][0]['message']['content'].strip().lower()
-            decision = "approved" if "approved" in content else "rejected"
-            print(f"[Hermes] -> 🧠 Decisión: {decision.upper()}\n")
-            return decision
+            content = res['choices'][0]['message']['content'].strip()
+            
+            # Subrutina de corrección de formato
+            if content.startswith("```"):
+                content = content.split('\n', 1)[1].rsplit('\n', 1)[0].strip()
+                
+            parsed_data = json.loads(content)
+            decision = parsed_data.get("decision", "rejected").lower()
+            suggestion = parsed_data.get("suggestion", "")
+            
+            print(f"[Hermes] -> 🧠 Decisión: {decision.upper()} | Sugerencia: {suggestion}\n")
+            return decision, suggestion
     except Exception as e:
         print(f"[Hermes] -> ⚠️ Error ({e}). Aprobando por defecto...")
-        return "approved"
+        return "approved", ""
 
 async def ejecutar_tarea_opencode(instruccion: str) -> str:
     print(f"\n🚀 Iniciando tarea: {instruccion}")
@@ -65,6 +74,9 @@ async def ejecutar_tarea_opencode(instruccion: str) -> str:
     await process.stdin.drain()
 
     respuesta_final = ""
+    session_id = None
+    current_prompt_id = 3
+
     while True:
         linea = await process.stdout.readline()
         if not linea: break
@@ -80,7 +92,7 @@ async def ejecutar_tarea_opencode(instruccion: str) -> str:
 
             if response.get("id") == 2 and "result" in response:
                 session_id = response["result"].get("sessionId")
-                process.stdin.write((json.dumps({"jsonrpc": "2.0", "method": "session/prompt", "id": 3, "params": {"sessionId": session_id, "prompt": [{"type": "text", "text": instruccion}]}}) + "\n").encode('utf-8'))
+                process.stdin.write((json.dumps({"jsonrpc": "2.0", "method": "session/prompt", "id": current_prompt_id, "params": {"sessionId": session_id, "prompt": [{"type": "text", "text": instruccion}]}}) + "\n").encode('utf-8'))
                 await process.stdin.drain()
 
             permiso_solicitado = False
@@ -95,12 +107,23 @@ async def ejecutar_tarea_opencode(instruccion: str) -> str:
                         permiso_solicitado = True
                         params_permiso = update_data
 
+            # Intercepción de permisos e inyección de la segunda fase (sugerencia)
             if permiso_solicitado:
-                decision = await consultar_hermes(params_permiso)
+                decision, sugerencia = await consultar_hermes(params_permiso)
+                
+                # Transmisión primitiva de la decisión
                 process.stdin.write((json.dumps({"jsonrpc": "2.0", "result": decision, "id": response.get("id")}) + "\n").encode('utf-8'))
                 await process.stdin.drain()
 
-            if response.get("id") == 3 and "result" in response:
+                # Inyección del prompt de retroalimentación
+                if decision == "rejected" and sugerencia and session_id:
+                    current_prompt_id += 1
+                    prompt_sugerencia = f"Tu acción fue rechazada por el auditor de seguridad. Sugerencia: {sugerencia}. Adapta tu estrategia y procede."
+                    process.stdin.write((json.dumps({"jsonrpc": "2.0", "method": "session/prompt", "id": current_prompt_id, "params": {"sessionId": session_id, "prompt": [{"type": "text", "text": prompt_sugerencia}]}}) + "\n").encode('utf-8'))
+                    await process.stdin.drain()
+
+            # Verificación dinámica del identificador para terminación del ciclo
+            if response.get("id") == current_prompt_id and "result" in response:
                 if response["result"].get("stopReason") == "end_turn":
                     process.terminate()
                     break

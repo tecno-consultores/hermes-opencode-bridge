@@ -84,7 +84,7 @@ x-hermes-base: &hermes-base
           memory: 4G
 
 x-hermes-opencode-bridge-base: &hermes-opencode-bridge-base
-    image: sinfallas/hermes-opencode-bridge:latest
+    image: sinfallas/hermes-opencode-bridge:testing
     hostname: ${acpname}
     container_name: ${acpname}
     pull_policy: ${pull_policy}
