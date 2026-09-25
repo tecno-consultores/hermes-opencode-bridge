@@ -1,0 +1,15 @@
+services:
+  test:
+    image: sinfallas/base-python-uv:3.13
+    container_name: acp_api_test
+    hostname: test_runner
+    pull_policy: always
+    environment:
+      TZ: 'America/Caracas'
+      HERMES_API_KEY: ${HERMES_API_KEY:-"fake_test_key"}
+      HERMES_API_URL: ${HERMES_API_URL:-"http://hermes:8642/v1/chat/completions"}
+      UV_PYTHON_DOWNLOADS: true # Permite a uv descargar las distintas versiones de Python
+    volumes:
+      - .:/app
+    working_dir: /app
+    command: bash -c "uv pip install --system tox tox-uv && tox"
