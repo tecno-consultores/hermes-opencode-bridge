@@ -1,20 +1,16 @@
-# Made by: Tecno Consultores 2023
 x-opencode-base: &opencode-base
     image: ghcr.io/anomalyco/opencode:latest
-    hostname: ${codehostname}
-    container_name: ${codehostname}
+    hostname: opencode
+    container_name: opencode  # Fijado a 'opencode' para hacer match con el código Python
     pull_policy: ${pull_policy}
     restart: ${restart}
     stdin_open: true
     tty: true
+    networks:
+      - acp-net
     environment:
       - TZ=${TIMEZONE}
       - OPENCODE_CONFIG_CONTENT=${OPENCODE_CONFIG_CONTENT}
-#      - OPENCODE_SERVER_USERNAME=${OPENCODE_SERVER_USERNAME} # uncomment to enable user and password
-#      - OPENCODE_SERVER_PASSWORD=${OPENCODE_SERVER_PASSWORD} # uncomment to enable user and password
-#      - OPENAI_API_KEY=${OPENAI_API_KEY} # to use openai	
-#      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-#      - GEMINI_API_KEY=${GEMINI_API_KEY}
     ports:
       - ${OCPORT}:${OCPORT}
     volumes:
@@ -38,7 +34,9 @@ x-hermes-base: &hermes-base
     pull_policy: ${pull_policy}
     restart: ${restart}
     shm_size: "1gb"
-    command: gateway run # The following command for hermes cli in case they change the path of the image /opt/hermes/.venv/bin/hermes
+    networks:
+      - acp-net
+    command: gateway run 
     environment:
       - PATH=/root/.local/bin:/opt/data/.local/bin:/opt/hermes/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
       - HERMES_DASHBOARD=1
@@ -58,11 +56,6 @@ x-hermes-base: &hermes-base
       - HERMES_DASHBOARD_PUBLIC_URL=${HERMES_DASHBOARD_PUBLIC_URL}
       - HERMES_QUIET=true
       - learning_acp_orchestrator=${learning_acp_orchestrator}
-#      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-#      - OPENAI_API_KEY=${OPENAI_API_KEY}
-#      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
-#      - HERMES_OPENROUTER_CACHE=true
-#      - NVIDIA_API_KEY=${NVIDIA_API_KEY}
     ports:
       - ${hapiport}:${hapiport}
       - ${hdport}:${hdport}
@@ -89,16 +82,32 @@ x-hermes-opencode-bridge-base: &hermes-opencode-bridge-base
     container_name: ${acpname}
     pull_policy: ${pull_policy}
     restart: ${restart}
+    networks:
+      - acp-net
     ports:
       - 8000:8000
     environment:
       - HERMES_API_KEY=${hapikey}
       - HERMES_API_URL=http://${hname}:${hapiport}/v1/chat/completions
       - TZ=${TIMEZONE}
+      # Expuesto por si necesitas tunear el prompt del auditor en el futuro sin reconstruir la imagen
+      - HERMES_SECURITY_PROMPT=${HERMES_SECURITY_PROMPT:-} 
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+    group_add:
+      - ${DOCKER_GID}  # Crucial para que Python pueda ejecutar docker exec
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8000/health"]
+      start_period: 5s
+      interval: 15s
+      timeout: 5s
+      retries: 3
 
 ################################################
+
+networks:
+  acp-net:
+    driver: bridge
 
 volumes:
   config-opencode:
@@ -122,6 +131,6 @@ services:
         profiles: ["acp-orchestrator"]
         depends_on:
           opencode:
-            condition: service_started
+            condition: service_healthy  # Bloquea el arranque hasta que wget responda
           hermes:
-            condition: service_started
+            condition: service_healthy  # Bloquea el arranque hasta que curl responda
