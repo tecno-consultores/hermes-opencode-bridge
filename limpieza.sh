@@ -17,6 +17,7 @@ rm -rf .tox
 rm -rf dist
 rm -rf tests/__pycache__
 rm -rf __pycache__
+rm -rf .buildx-cache
 docker system prune -af
 echo "Finalizado."
 exit 0

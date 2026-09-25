@@ -40,13 +40,23 @@ services:
     container_name: acp-orchestrator
     ports:
       - "8000:8000"
+    environment:
+      - HERMES_API_URL=http://hermes:8642/v1/chat/completions
+      - HERMES_API_KEY=${HERMES_API_KEY:-}
+      # Opcional: Personalizar la directiva de auditoría de seguridad
+      - HERMES_SECURITY_PROMPT=${HERMES_SECURITY_PROMPT:-}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - /etc/timezone:/etc/timezone:ro
       - /etc/localtime:/etc/localtime:ro
+    group_add:
+      # Crucial: Sustituir por el ID del grupo docker en el host (ej. 998)
+      - ${DOCKER_GID:-999}
     depends_on:
       opencode:
-        condition: service_started
+        condition: service_healthy
+      hermes:
+        condition: service_healthy
 ```
 
 ## 🔌 Integración Automática (System Prompt)
