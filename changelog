@@ -1,16 +1,70 @@
-* commit 06c43842212fe5696c5ba0f9d8a0137b7c85a9ed (HEAD -> develop, origin/develop)
+* commit b03e01869b606d60fd926d147a6406cbcb1fcf20 (HEAD -> develop, origin/develop)
 | Author: Jesus Palencia <sinfallas@gmail.com>
-| Date:   Sun Sep 20 13:20:15 2026 -0400
+| Date:   Sat Sep 26 19:44:28 2026 -0400
 | 
-|     * update
+|     * readme
 | 
-* commit 7b8690d951a4cc5d2d2b3e29e02cad71c4c0cce9
+* commit 997cf4d16fe82e6642aad72e46467f0886ceb215
 | Author: Jesus Palencia <sinfallas@gmail.com>
-| Date:   Wed Sep 16 18:01:12 2026 -0400
+| Date:   Sat Sep 26 17:40:06 2026 -0400
+| 
+|     * readme
+| 
+* commit 56cee7e50d8b12dcbc340d3608f4fd574d4cc831
+| Author: Jesus Palencia <sinfallas@gmail.com>
+| Date:   Sat Sep 26 17:37:35 2026 -0400
+| 
+|     * readme
+| 
+* commit bce8766a5a3f97fa94a82a9777aad9b9aa363b9f
+| Author: Jesus Palencia <sinfallas@gmail.com>
+| Date:   Fri Sep 25 16:38:49 2026 -0400
 | 
 |     Actualizacion automatica
 |     
-| *   commit a5bac665dd55ea971a15de502243035f473a1fa0 (origin/main, origin/HEAD, main)
+| *   commit f2824f5970ebde5c6a4bfcb034957d5c3d023714 (origin/main, origin/HEAD, main)
+| |\  Merge: 8d525a5 fffc7ff
+| |/  Author: Sinfallas <sinfallas@gmail.com>
+|/|   Date:   Fri Sep 25 16:34:32 2026 -0400
+| |   
+| |       Merge pull request #11 from tecno-consultores/develop
+| |       
+| |       Develop
+| | 
+* | commit fffc7ff975640f8e35966031dcee064aac751fc6
+| | Author: Jesus Palencia <sinfallas@gmail.com>
+| | Date:   Fri Sep 25 16:33:26 2026 -0400
+| | 
+| |     Actualizacion automatica
+| | 
+* | commit ead87646c03796e82174f4324005ab346de01cc4
+| | Author: Jesus Palencia <sinfallas@gmail.com>
+| | Date:   Sun Sep 20 13:20:17 2026 -0400
+| | 
+| |     * changelog
+| |   
+| *   commit 8d525a537ce704bcfdf3ba4f39ff797b1bc89217
+| |\  Merge: a5bac66 06c4384
+| |/  Author: Sinfallas <sinfallas@gmail.com>
+|/|   Date:   Sun Sep 20 13:25:01 2026 -0400
+| |   
+| |       Merge pull request #10 from tecno-consultores/develop
+| |       
+| |       Develop
+| | 
+* | commit 06c43842212fe5696c5ba0f9d8a0137b7c85a9ed
+| | Author: Jesus Palencia <sinfallas@gmail.com>
+| | Date:   Sun Sep 20 13:20:15 2026 -0400
+| | 
+| |     * update
+| | 
+* | commit 7b8690d951a4cc5d2d2b3e29e02cad71c4c0cce9
+| | Author: Jesus Palencia <sinfallas@gmail.com>
+| | Date:   Wed Sep 16 18:01:12 2026 -0400
+| | 
+| |     Actualizacion automatica
+| |   
+| *   commit a5bac665dd55ea971a15de502243035f473a1fa0
 | |\  Merge: 21332dd 60596c0
 | |/  Author: Sinfallas <sinfallas@gmail.com>
 |/|   Date:   Sat Sep 12 22:13:28 2026 -0400
