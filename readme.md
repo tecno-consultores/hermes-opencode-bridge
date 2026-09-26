@@ -76,17 +76,38 @@ Una vez levantado el entorno, usted puede confirmar que el puente está escuchan
 curl -I -X HEAD http://localhost:8000/sse
 ```
 
-## 🛠️ Ejecución de Pruebas
+## 🛠️ Ejecución de Pruebas y Aseguramiento de Calidad (QA)
 
-Para ejecutar la suite de pruebas del proyecto de forma local, utilice el siguiente comando:
+El proyecto cuenta con un entorno estricto de validación aislado mediante el manifiesto `docker-compose.qa.yml`. Este pipeline garantiza la cobertura del código, la ausencia de vulnerabilidades y la robustez general de la API.
 
+**Fase 1: Preparación y Pruebas Base (Unitarias)**
+Ejecuta la suite con `pytest` (mockeando las conexiones externas), validando tipos con `mypy` y verificando estilo con el linter `ruff`:
 ```bash
-docker compose -f docker-compose.test.yml run --rm test
+docker compose -f docker-compose.qa.yml run --rm test bash -c "uv pip install --system -e '.[dev]' && tox"
 ```
 
-**¿Para qué se debe usar este comando?**
-* **Entorno Aislado:** Levanta un contenedor efímero dedicado exclusivamente al testing, instalando dinámicamente las herramientas necesarias (como `tox` y `pytest`) sin ensuciar el entorno host.
-* **Limpieza Automática:** El flag `--rm` garantiza que, apenas terminen de ejecutarse las pruebas, el contenedor sea destruido y eliminado de forma automática. Esto evita la acumulación de contenedores huérfanos o detenidos en su sistema y conflictos de nombres en futuras ejecuciones.
-* **Consistencia:** Es la práctica recomendada para validar cambios en el código localmente, ya que asegura que cada corrida de pruebas inicie desde un estado completamente limpio.
+**Fase 2: Seguridad y Análisis Estático (SAST)**
+Escanea el árbol de dependencias buscando vulnerabilidades (CVEs) con `pip-audit` y audita el código fuente buscando patrones inseguros de Python con `bandit`:
+```bash
+docker compose -f docker-compose.qa.yml run --rm test bash -c "uv pip install --system -e '.[dev]' && pip-audit --skip pip && bandit -r acp_api.py"
+```
+
+**Fase 3: Pruebas de Mutación**
+Evalúa la robustez de la suite de pruebas inyectando fallos artificiales en el código base mediante `mutmut`, garantizando que no existan falsos positivos en el reporte de cobertura:
+```bash
+docker compose -f docker-compose.qa.yml run --rm test bash -c "uv pip install --system -e '.[dev]' pytest-timeout && rm -f .mutmut-cache && mutmut run"
+```
+
+**Fase 4: Pruebas de Estrés y Carga**
+Simula 100 usuarios concurrentes asediando la API mediante `locust` para validar el rendimiento asíncrono y la latencia (requiere levantar la API previamente con `docker compose -f docker-compose.qa.yml up -d api`):
+```bash
+docker compose -f docker-compose.qa.yml run --rm test bash -c "uv pip install --system -e '.[dev]' && locust -f locustfile.py --headless -u 100 -r 10 -t 1m --host http://api:8000"
+```
+
+**Fase 5: Pruebas de Contratos y Fuzzing (Schemathesis)**
+Bombardea los endpoints expuestos con datos aleatorios y malformados basándose en el esquema OpenAPI para garantizar que la aplicación soporte entradas extremas sin colapsar (requiere la API levantada):
+```bash
+docker compose -f docker-compose.qa.yml run --rm test bash -c "uv pip install --system -e '.[dev]' && schemathesis run http://api:8000/openapi.json --exclude-path /mcp/sse --exclude-checks positive_data_acceptance"
+```
 
 Obtener la imagen en Docker Hub: https://hub.docker.com/r/sinfallas/hermes-opencode-bridge

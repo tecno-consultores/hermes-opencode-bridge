@@ -1,30 +1,24 @@
-import asyncio
+# test_acp_api.py
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
 from acp_api import (
-    active_sse_queues,
+    OpenCodeRPCController,
     app,
-    background_opencode_task,
     consultar_hermes,
-    ejecutar_tarea_opencode,
-    sse_bulletproof,
+    handle_call_tool,
+    handle_list_tools,
+    mcp_server,
 )
 
 # --- Fixtures ---
 
 @pytest.fixture
 def client():
-    """Provee un cliente de pruebas para FastAPI."""
+    """Provee un cliente de pruebas para la app principal FastAPI."""
     return TestClient(app)
-
-@pytest.fixture(autouse=True)
-def reset_sse_queues():
-    """Limpia el diccionario global de colas SSE antes de cada prueba."""
-    active_sse_queues.clear()
-    yield
 
 # ==========================================
 # 1. PRUEBAS UNITARIAS (Aisladas, sin red, mocking de todo)
@@ -53,6 +47,11 @@ class TestUnitariasAcpApi:
         mock_httpx_client.return_value.__aenter__.return_value = mock_client_instance
 
         decision, sugerencia = await consultar_hermes({"accion": "leer archivo"})
+        
+        call_args = mock_client_instance.post.call_args[1]
+        assert "response_format" in call_args["json"]
+        assert call_args["json"]["response_format"]["type"] == "json_schema"
+        
         assert decision == "approved"
         assert sugerencia == ""
 
@@ -76,22 +75,6 @@ class TestUnitariasAcpApi:
     @pytestmark_unit
     @pytest.mark.asyncio
     @patch("acp_api.httpx.AsyncClient")
-    async def test_consultar_hermes_markdown_correction(self, mock_httpx_client):
-        mock_response = MagicMock()
-        mock_response.json.return_value = {
-            "choices": [{"message": {"content": '```json\n{"decision": "approved", "suggestion": ""}\n```'}}]
-        }
-        
-        mock_client_instance = AsyncMock()
-        mock_client_instance.post.return_value = mock_response
-        mock_httpx_client.return_value.__aenter__.return_value = mock_client_instance
-
-        decision, _ = await consultar_hermes({"accion": "test"})
-        assert decision == "approved"
-
-    @pytestmark_unit
-    @pytest.mark.asyncio
-    @patch("acp_api.httpx.AsyncClient")
     async def test_consultar_hermes_exception_fallback(self, mock_httpx_client):
         mock_client_instance = AsyncMock()
         mock_client_instance.post.side_effect = Exception("Simulated Timeout")
@@ -100,11 +83,14 @@ class TestUnitariasAcpApi:
         decision, _ = await consultar_hermes({"accion": "test"})
         assert decision == "approved"
 
+    # --- Pruebas del Controlador JSON-RPC (OpenCodeRPCController) ---
+
     @pytestmark_unit
     @pytest.mark.asyncio
     @patch("acp_api.asyncio.create_subprocess_exec")
-    async def test_ejecutar_tarea_opencode_basico(self, mock_create_subprocess):
+    async def test_opencode_rpc_controller_basico(self, mock_create_subprocess):
         mock_process = MagicMock()
+        mock_process.returncode = None
         mock_process.stdin = MagicMock()
         mock_process.stdin.write = MagicMock()
         mock_process.stdin.drain = AsyncMock()
@@ -118,22 +104,27 @@ class TestUnitariasAcpApi:
             b'{"jsonrpc": "2.0", "id": 3, "result": {"stopReason": "end_turn"}}\n',
             b''
         ]
+        mock_process.wait = AsyncMock()
         mock_create_subprocess.return_value = mock_process
 
-        resultado = await ejecutar_tarea_opencode("saluda")
-        assert resultado == "Hola"
+        controller = OpenCodeRPCController("saluda")
+        await controller.start()
+        
+        assert controller.respuesta_final == "Hola"
         mock_process.terminate.assert_called_once()
 
     @pytestmark_unit
     @pytest.mark.asyncio
     @patch("acp_api.consultar_hermes")
     @patch("acp_api.asyncio.create_subprocess_exec")
-    async def test_ejecutar_tarea_opencode_flujo_complejo(self, mock_create_subprocess, mock_consultar):
+    async def test_opencode_rpc_controller_flujo_rechazo(self, mock_create_subprocess, mock_consultar):
         mock_process = MagicMock()
+        mock_process.returncode = None
         mock_process.stdin = MagicMock()
         mock_process.stdin.drain = AsyncMock()
         mock_process.stdout = MagicMock()
         mock_process.stdout.readline = AsyncMock()
+        mock_process.wait = AsyncMock()
         
         mock_process.stdout.readline.side_effect = [
             b'{"jsonrpc": "2.0", "id": 1, "result": {}}\n',
@@ -147,105 +138,66 @@ class TestUnitariasAcpApi:
         mock_consultar.return_value = ("rejected", "no lo hagas")
         mock_create_subprocess.return_value = mock_process
 
-        await ejecutar_tarea_opencode("haz algo malo")
+        controller = OpenCodeRPCController("haz algo malo")
+        await controller.start()
+        
         mock_consultar.assert_called_once()
 
     @pytestmark_unit
     @pytest.mark.asyncio
     @patch("acp_api.asyncio.create_subprocess_exec")
-    async def test_ejecutar_tarea_opencode_sin_pipes(self, mock_create_subprocess):
+    async def test_opencode_rpc_controller_sin_pipes(self, mock_create_subprocess):
         mock_process = MagicMock()
         mock_process.stdin = None
         mock_create_subprocess.return_value = mock_process
         
+        controller = OpenCodeRPCController("test")
         with pytest.raises(RuntimeError):
-            await ejecutar_tarea_opencode("test")
+            await controller.start()
+
+    # --- Pruebas Herramienta MCP Nativas ---
 
     @pytestmark_unit
     @pytest.mark.asyncio
     @patch("acp_api.ejecutar_tarea_opencode")
-    async def test_background_opencode_task(self, mock_ejecutar):
-        mock_ejecutar.return_value = "Todo bien"
-        await background_opencode_task("test")
+    async def test_handle_call_tool_success(self, mock_ejecutar):
+        mock_ejecutar.return_value = "Código generado correctamente"
         
-        mock_ejecutar.side_effect = Exception("Fallo catastrófico")
-        await background_opencode_task("test")
+        resultado = await handle_call_tool("delegar_a_opencode", {"instruction": "escribe un test"})
+        texto = resultado[0].text
         
-        assert mock_ejecutar.call_count == 2
-
-    # --- Pruebas SSE (FastAPI Routing) ---
-    
-    @pytestmark_unit
-    @patch("acp_api.asyncio.Queue")
-    def test_sse_endpoint_get_stream(self, mock_queue_cls, client):
-        """Cubre el generador SSE y suprime warnings de corrutinas no esperadas."""
-        mock_queue_instance = MagicMock()
-        mock_queue_instance.get = AsyncMock(side_effect=[asyncio.TimeoutError(), asyncio.CancelledError()])
-        mock_queue_cls.return_value = mock_queue_instance
-        
-        response = client.get("/sse")
-        assert response.status_code == 200
-        assert "text/event-stream" in response.headers["content-type"]
-
-    @pytestmark_unit
-    def test_sse_endpoint_head(self, client):
-        response = client.head("/sse")
-        assert response.status_code == 200
-        assert "mcp-protocol-version" in response.headers
-
-    @pytestmark_unit
-    def test_sse_endpoint_post_invalid_json(self, client):
-        response = client.post("/sse", content=b"esto_no_es_json")
-        assert response.status_code == 400
-
-    @pytestmark_unit
-    def test_sse_endpoint_post_no_id(self, client):
-        response = client.post("/sse", json={"method": "notifications/initialized"})
-        assert response.status_code == 202
-
-    @pytestmark_unit
-    def test_sse_endpoint_post_initialize(self, client):
-        payload = {"jsonrpc": "2.0", "id": 1, "method": "initialize"}
-        response = client.post("/sse", json=payload)
-        assert response.status_code == 200
-        assert response.json()["id"] == 1
-
-    @pytestmark_unit
-    @patch("acp_api.BackgroundTasks.add_task")
-    def test_sse_endpoint_post_tools_call(self, mock_add_task, client):
-        payload = {
-            "jsonrpc": "2.0", 
-            "id": 3, 
-            "method": "tools/call",
-            "params": {"arguments": {"instruction": "print('Hola')"}}
-        }
-        response = client.post("/sse", json=payload)
-        assert response.status_code == 200
-        mock_add_task.assert_called_once()
+        assert "Status: Success." in texto
+        assert "Código generado correctamente" in texto
 
     @pytestmark_unit
     @pytest.mark.asyncio
-    async def test_sse_endpoint_post_routes_to_queue(self):
-        """Verifica que si existe un session_id en la URL, el payload se envía a su cola."""
-        # Fix: Usar MagicMock para los métodos sincrónicos y AsyncMock sólo para el JSON.
-        mock_request = MagicMock()
-        mock_request.method = "POST"
-        mock_request.headers = {}
-        mock_request.json = AsyncMock(return_value={"id": 99, "method": "initialize"})
-        mock_request.query_params.get.return_value = "fake-session"
+    @patch("acp_api.ejecutar_tarea_opencode")
+    async def test_handle_call_tool_error(self, mock_ejecutar):
+        mock_ejecutar.side_effect = Exception("Fallo en el contenedor Docker")
         
-        active_sse_queues["fake-session"] = AsyncMock()
-        await sse_bulletproof(mock_request, MagicMock())
-        active_sse_queues["fake-session"].put.assert_called_once()
+        resultado = await handle_call_tool("delegar_a_opencode", {"instruction": "escribe un test"})
+        texto = resultado[0].text
+        
+        assert "Status: Error." in texto
+        assert "Fallo en el contenedor Docker" in texto
 
     @pytestmark_unit
     @pytest.mark.asyncio
-    async def test_sse_endpoint_fallback_405(self):
-        mock_request = MagicMock()
-        mock_request.method = "PUT"
-        mock_request.headers = {}
-        response = await sse_bulletproof(mock_request, MagicMock())
-        assert response.status_code == 405
+    async def test_handle_call_tool_unknown(self):
+        with pytest.raises(ValueError, match="Herramienta desconocida"):
+            await handle_call_tool("herramienta_falsa", {"instruction": "test"})
+
+    @pytestmark_unit
+    @pytest.mark.asyncio
+    async def test_handle_list_tools(self):
+        tools = await handle_list_tools()
+        assert len(tools) == 1
+        assert tools[0].name == "delegar_a_opencode"
+
+    @pytestmark_unit
+    def test_mcp_server_registration(self):
+        """Verifica que el servidor subyacente se instanció correctamente."""
+        assert mcp_server.name == "acp-orchestrator"
 
 # ==========================================
 # 2. PRUEBAS DE INTEGRACIÓN (Requieren entorno Docker / Red real)
@@ -264,15 +216,8 @@ class TestIntegracionAcpApi:
         assert isinstance(sugerencia, str)
 
     @pytestmark_integration
-    def test_integracion_sse_stream(self):
-        import requests
-        try:
-            url = "http://127.0.0.1:8000/sse"
-            response = requests.get(url, stream=True, timeout=5)
-            assert response.status_code == 200
-            
-            primer_evento = next(response.iter_lines()).decode('utf-8')
-            assert "event: endpoint" in primer_evento or "data:" in primer_evento
-            response.close()
-        except requests.exceptions.ConnectionError:
-            pytest.skip("API de integración no disponible en http://127.0.0.1:8000")
+    @patch("acp_api.mcp_server.run", new_callable=AsyncMock)
+    def test_integracion_mcp_endpoint_montado(self, mock_run, client):
+        """Verifica que la app FastAPI ha delegado correctamente el enrutamiento a MCP sin atascarse en el stream."""
+        response = client.get("/mcp/sse")
+        assert response.status_code == 200

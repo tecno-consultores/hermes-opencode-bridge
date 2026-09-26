@@ -1,0 +1,45 @@
+# pyproject.toml
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "acp-orchestrator"
+version = "1.0.0"
+description = "Orquestador ACP Hermes-OpenCode"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "pydantic",
+    "mcp",
+    "httpx"
+]
+
+[project.optional-dependencies]
+dev = [
+    # Pruebas base y cobertura
+    "pytest",
+    "pytest-asyncio",
+    "pytest-mock",
+    "pytest-cov",
+    "pytest-timeout",
+    "ruff",
+    "mypy",
+    
+    # Fase 2: SAST (Seguridad y vulnerabilidades)
+    "bandit",
+    "pip-audit",
+    
+    # Fase 3: Mutación
+    "mutmut",
+    
+    # Fase 4: Estrés y Carga
+    "locust",
+    
+    # Fase 5: Contratos / Fuzzing
+    "schemathesis"
+]
+
+[tool.setuptools]
+py-modules = ["acp_api"]

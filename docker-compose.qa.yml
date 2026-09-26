@@ -1,0 +1,32 @@
+services:
+  api:
+    image: sinfallas/base-python-uv:3.13
+    container_name: acp_qa_api
+    hostname: qa_api
+    environment:
+      TZ: 'America/Caracas'
+      HERMES_API_KEY: ${HERMES_API_KEY:-"fake_test_key"}
+      HERMES_API_URL: ${HERMES_API_URL:-"http://hermes:8642/v1/chat/completions"}
+    volumes:
+      - .:/app
+    working_dir: /app
+    ports:
+      - "8000:8000"
+    command: bash -c "uv pip install --system -e '.[dev]' && uvicorn acp_api:app --host 0.0.0.0 --port 8000"
+
+  test:
+    image: sinfallas/base-python-uv:3.13
+    container_name: acp_api_test
+    hostname: test_runner
+    pull_policy: always
+    environment:
+      TZ: 'America/Caracas'
+      HERMES_API_KEY: ${HERMES_API_KEY:-"fake_test_key"}
+      HERMES_API_URL: ${HERMES_API_URL:-"http://hermes:8642/v1/chat/completions"}
+      UV_PYTHON_DOWNLOADS: true
+    volumes:
+      - .:/app
+    working_dir: /app
+    command: bash -c "uv pip install --system tox tox-uv && tox"
+    depends_on:
+      - api
