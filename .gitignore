@@ -1,6 +1,8 @@
 .idea/
 .buildx-cache/
 .env
+
+# Terraform
 .terraform/
 .terraform.lock.hcl
 *.tfstate
@@ -11,3 +13,13 @@ override.tf
 override.tf.json
 *_override.tf
 *_override.tf.json
+
+# Artefactos de Python, Pruebas y Cobertura
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.tox/
+.coverage
+htmlcov/
+coverage.xml
