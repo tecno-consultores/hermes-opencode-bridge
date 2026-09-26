@@ -76,4 +76,17 @@ Una vez levantado el entorno, usted puede confirmar que el puente está escuchan
 curl -I -X HEAD http://localhost:8000/sse
 ```
 
+## 🛠️ Ejecución de Pruebas
+
+Para ejecutar la suite de pruebas del proyecto de forma local, utilice el siguiente comando:
+
+```bash
+docker compose -f docker-compose.test.yml run --rm test
+```
+
+**¿Para qué se debe usar este comando?**
+* **Entorno Aislado:** Levanta un contenedor efímero dedicado exclusivamente al testing, instalando dinámicamente las herramientas necesarias (como `tox` y `pytest`) sin ensuciar el entorno host.
+* **Limpieza Automática:** El flag `--rm` garantiza que, apenas terminen de ejecutarse las pruebas, el contenedor sea destruido y eliminado de forma automática. Esto evita la acumulación de contenedores huérfanos o detenidos en su sistema y conflictos de nombres en futuras ejecuciones.
+* **Consistencia:** Es la práctica recomendada para validar cambios en el código localmente, ya que asegura que cada corrida de pruebas inicie desde un estado completamente limpio.
+
 Obtener la imagen en Docker Hub: https://hub.docker.com/r/sinfallas/hermes-opencode-bridge
