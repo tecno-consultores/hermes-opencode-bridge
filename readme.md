@@ -61,10 +61,10 @@ services:
 
 ## 🔌 Integración Automática (System Prompt)
 
-Para lograr un despliegue "Zero-Touch" donde Hermes se conecte a este orquestador de manera autónoma, configure la siguiente variable de entorno (`learning_acp_orchestrator`) en su contenedor de Hermes. Esta instrucción incluye el protocolo de auto-ensamblaje, la separación de roles y la exigencia de respuestas estructuradas en JSON para la auditoría:
+Para lograr un despliegue "Zero-Touch" donde Hermes se conecte a este orquestador de manera autónoma, configure la siguiente variable de entorno (`learning_acp_orchestrator`) en su contenedor de Hermes. Esta instrucción incluye el protocolo de auto-ensamblaje, la separación de roles y la exigencia de respuestas estructuradas en estricto JSON para la auditoría:
 
 ```bash
-Role: Lead DevOps Manager. INITIALIZATION PROTOCOL: Before starting any task, check if the 'delegar_a_opencode' tool is available. If NOT, use your local terminal to execute exactly: '/opt/hermes/.venv/bin/hermes mcp add acp-orchestrator --url http://acp-orchestrator:8000/sse'. OPERATING RULES: You are the orchestrator. You MAY use your local terminal for host-level tasks, container orchestration (Docker), and system checks. However, you MUST DELEGATE all code writing, workspace file modifications, python package management (uv), and worker-side executions to your dedicated OpenCode worker using the 'delegar_a_opencode' tool. Provide the worker with highly detailed, step-by-step instructions. IMPORTANT SECURITY AUDIT: You monitor the worker. If prompted to evaluate a potentially dangerous action from OpenCode, switch to auditor mode. Evaluate its safety and respond ONLY with a valid JSON object containing two keys: 'decision' (must be 'approved' or 'rejected') and 'suggestion' (feedback or alternative action, leave empty if approved). Do not include markdown formatting.
+Role: Lead DevOps Manager. INITIALIZATION PROTOCOL: Before starting any task, check if the 'delegar_a_opencode' tool is available. If NOT, use your local terminal to execute exactly: '/opt/hermes/.venv/bin/hermes mcp add acp-orchestrator --url http://acp-orchestrator:8000/mcp/sse'. OPERATING RULES: You are the orchestrator. You MAY use your local terminal for host-level tasks, container orchestration (Docker), and system checks. However, you MUST DELEGATE all code writing, workspace file modifications, python package management (uv), and worker-side executions to your dedicated OpenCode worker using the 'delegar_a_opencode' tool. Provide the worker with highly detailed, step-by-step instructions. IMPORTANT SECURITY AUDIT: You monitor the worker. If prompted to evaluate a potentially dangerous action from OpenCode, switch to auditor mode. You MUST reply strictly conforming to the requested JSON schema, providing a 'decision' (strictly 'approved' or 'rejected') and a 'suggestion' (a brief explanation or alternative if rejected, otherwise empty).
 ```
 
 ## 🧪 Verificación de Conexión
@@ -73,7 +73,7 @@ Una vez levantado el entorno, usted puede confirmar que el puente está escuchan
 
 ```bash
 # Debería devolver HTTP 200 y las cabeceras de protocolo MCP inyectadas
-curl -I -X HEAD http://localhost:8000/sse
+curl -I -X HEAD http://localhost:8000/mcp/sse
 ```
 
 ## 🛠️ Ejecución de Pruebas y Aseguramiento de Calidad (QA)
@@ -83,7 +83,7 @@ El proyecto cuenta con un entorno estricto de validación aislado mediante el ma
 **Fase 1: Preparación y Pruebas Base (Unitarias)**
 Ejecuta la suite con `pytest` (mockeando las conexiones externas), validando tipos con `mypy` y verificando estilo con el linter `ruff`:
 ```bash
-docker compose -f docker-compose.qa.yml run --rm test bash -c "uv pip install --system -e '.[dev]' && tox"
+docker compose -f docker-compose.qa.yml run --rm test
 ```
 
 **Fase 2: Seguridad y Análisis Estático (SAST)**
@@ -98,7 +98,7 @@ Evalúa la robustez de la suite de pruebas inyectando fallos artificiales en el 
 docker compose -f docker-compose.qa.yml run --rm test bash -c "uv pip install --system -e '.[dev]' && pytest --cov=acp_api && rm -f .mutmut-cache && mutmut run"
 ```
 
-para ver el resultado de las pruebas de mutacion:
+Para ver el resultado de las pruebas de mutación:
 ```bash
 docker compose -f docker-compose.qa.yml run --rm test bash -c "uv pip install --system -e '.[dev]' && mutmut results"
 ```
@@ -113,6 +113,16 @@ docker compose -f docker-compose.qa.yml run --rm test bash -c "uv pip install --
 Bombardea los endpoints expuestos con datos aleatorios y malformados basándose en el esquema OpenAPI para garantizar que la aplicación soporte entradas extremas sin colapsar (requiere la API levantada):
 ```bash
 docker compose -f docker-compose.qa.yml run --rm test bash -c "uv pip install --system -e '.[dev]' && schemathesis run http://api:8000/openapi.json --exclude-path /mcp/sse --exclude-checks positive_data_acceptance"
+```
+
+**Fase 6: Prueba de Integración End-to-End (Modo Desarrollo)**
+Para probar todo el ecosistema (Hermes, OpenCode y el Orquestador) en tiempo real montando el código local sin reconstruir la imagen de producción, utilice el archivo de *override* (`docker-compose.dev.yml`):
+```bash
+docker compose --env-file .env -f docker-compose.yml -f docker-compose.dev.yml --profile acp-orchestrator up -d
+```
+Para seguir los logs en vivo durante la prueba:
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml logs -f acp-orchestrator
 ```
 
 Obtener la imagen en Docker Hub: https://hub.docker.com/r/sinfallas/hermes-opencode-bridge

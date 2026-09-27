@@ -25,5 +25,6 @@ rm -rf .buildx-cache
 rm -rf mutants
 rm -rf *.egg-info
 docker system prune -af
+docker volume prune -af
 echo "Finalizado."
 exit 0

@@ -5,7 +5,7 @@ import os
 from typing import Any
 
 import httpx
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from mcp import types
 from mcp.server import Server
 from mcp.server.sse import SseServerTransport
@@ -212,72 +212,87 @@ async def ejecutar_tarea_opencode(instruccion: str) -> str:
 # ==========================================
 mcp_server = Server("acp-orchestrator")
 
-async def handle_list_tools() -> list[types.Tool]:
-    """Expone las herramientas disponibles para el cliente MCP."""
-    return [
-        types.Tool(
-            name="delegar_a_opencode",
-            description="Delega una tarea de programación al worker OpenCode.",
-            input_schema={
-                "type": "object",
-                "properties": {
-                    "instruction": {"type": "string"}
-                },
-                "required": ["instruction"]
-            }
-        )
-    ]
+async def handle_list_tools(request: Any = None) -> types.ListToolsResult:
+    """Expone las herramientas disponibles interceptando la petición nativa."""
+    return types.ListToolsResult(
+        tools=[
+            types.Tool(
+                name="delegar_a_opencode",
+                description="Delega una tarea de programación al worker OpenCode.",
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "instruction": {"type": "string"}
+                    },
+                    "required": ["instruction"]
+                }
+            )
+        ]
+    )
 
-async def handle_call_tool(name: str, arguments: dict | None) -> list[types.TextContent]:
-    """Maneja la ejecución de la herramienta por parte del cliente."""
+async def handle_call_tool(request: Any = None) -> types.CallToolResult:
+    """Maneja la ejecución interceptando los argumentos del cliente."""
+    # Como relajamos el tipo en la firma, debemos asegurarnos de poder acceder a request de forma segura
+    if not request or not hasattr(request, "params"):
+        return types.CallToolResult(content=[], is_error=True)
+
+    name = request.params.name
+    arguments = request.params.arguments
+    
     if name != "delegar_a_opencode":
         raise ValueError(f"Herramienta desconocida: {name}")
         
     instruction = arguments.get("instruction") if arguments else ""
-    if not instruction:  # pragma: no cover
+    if not instruction:
         raise ValueError("La instrucción es obligatoria.")
         
     try:
         resultado = await ejecutar_tarea_opencode(instruction)
         print("\n[Orquestador] ✅ Tarea OpenCode finalizada.\n")
-        return [types.TextContent(
-            type="text",
-            text=f"Status: Success.\nOpenCode Output:\n{resultado}"
-        )]
+        return types.CallToolResult(
+            content=[types.TextContent(
+                type="text",
+                text=f"Status: Success.\nOpenCode Output:\n{resultado}"
+            )]
+        )
     except Exception as e:  # noqa: BLE001
         error_msg = f"Status: Error. {e}"
         print(f"\n[Orquestador] ❌ Error ejecutando tarea: {error_msg}\n")
-        return [types.TextContent(
-            type="text",
-            text=error_msg
-        )]
+        return types.CallToolResult(
+            content=[types.TextContent(
+                type="text",
+                text=error_msg
+            )],
+            is_error=True
+        )
 
-if hasattr(mcp_server, "list_tools"):  # pragma: no cover
-    mcp_server.list_tools()(handle_list_tools)  # type: ignore
-elif hasattr(mcp_server, "set_list_tools_handler"):  # pragma: no cover
-    mcp_server.set_list_tools_handler(handle_list_tools)  # type: ignore
-
-if hasattr(mcp_server, "call_tool"):  # pragma: no cover
-    mcp_server.call_tool()(handle_call_tool)  # type: ignore
-elif hasattr(mcp_server, "set_call_tool_handler"):  # pragma: no cover
-    mcp_server.set_call_tool_handler(handle_call_tool)  # type: ignore
+# Registro explícito de los métodos nativos del SDK ignorando la comprobación estricta de mypy
+mcp_server.add_request_handler("tools/list", types.ListToolsRequest, handle_list_tools)  # type: ignore
+mcp_server.add_request_handler("tools/call", types.CallToolRequest, handle_call_tool)  # type: ignore
 
 
 # Integración declarativa con FastAPI a través del transporte nativo de MCP
 sse = SseServerTransport("/mcp/messages")
 
+class BypassedResponse(Response):
+    """Respuesta vacía para decirle a FastAPI que no intente enviar 
+    cabeceras HTTP adicionales, evitando el choque ASGI y el TCP Reset."""
+    async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
+        pass
+
 @app.get("/mcp/sse")
-async def mcp_sse_handler(request: Request) -> None:  # pragma: no cover
+async def mcp_sse_handler(request: Request) -> Response:  # pragma: no cover
     async with sse.connect_sse(request.scope, request.receive, request._send) as streams:  # type: ignore
         if hasattr(mcp_server, "run"):
             await mcp_server.run(streams[0], streams[1], mcp_server.create_initialization_options())  # type: ignore
+    return BypassedResponse()
 
 @app.post(
     "/mcp/messages",
     openapi_extra={
         "parameters": [
             {
-                "name": "session_id",  # <- Corregido a snake_case
+                "name": "session_id",
                 "in": "query",
                 "required": True,
                 "schema": {"type": "string"}
@@ -300,6 +315,7 @@ async def mcp_sse_handler(request: Request) -> None:  # pragma: no cover
         500: {"description": "Error interno"}
     }
 )
-async def mcp_messages_handler(request: Request) -> None:  # pragma: no cover
+async def mcp_messages_handler(request: Request) -> Response:  # pragma: no cover
     if hasattr(sse, "handle_post_message"):
         await sse.handle_post_message(request.scope, request.receive, request._send)  # type: ignore
+    return BypassedResponse()

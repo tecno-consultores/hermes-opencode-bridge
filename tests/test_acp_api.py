@@ -1,4 +1,4 @@
-# test_acp_api.py
+# test_acp_api_2.py
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -189,8 +189,12 @@ class TestUnitariasAcpApi:
     async def test_handle_call_tool_success(self, mock_ejecutar):
         mock_ejecutar.return_value = "Código generado correctamente"
         
-        resultado = await handle_call_tool("delegar_a_opencode", {"instruction": "escribe un test"})
-        texto = resultado[0].text
+        mock_req = MagicMock()
+        mock_req.params.name = "delegar_a_opencode"
+        mock_req.params.arguments = {"instruction": "escribe un test"}
+        
+        resultado = await handle_call_tool(mock_req)
+        texto = resultado.content[0].text
         
         assert "Status: Success." in texto
         assert "Código generado correctamente" in texto
@@ -201,29 +205,61 @@ class TestUnitariasAcpApi:
     async def test_handle_call_tool_error(self, mock_ejecutar):
         mock_ejecutar.side_effect = Exception("Fallo en el contenedor Docker")
         
-        resultado = await handle_call_tool("delegar_a_opencode", {"instruction": "escribe un test"})
-        texto = resultado[0].text
+        mock_req = MagicMock()
+        mock_req.params.name = "delegar_a_opencode"
+        mock_req.params.arguments = {"instruction": "escribe un test"}
+        
+        resultado = await handle_call_tool(mock_req)
+        texto = resultado.content[0].text
         
         assert "Status: Error." in texto
         assert "Fallo en el contenedor Docker" in texto
+        assert resultado.is_error is True
 
     @pytestmark_unit
     @pytest.mark.asyncio
     async def test_handle_call_tool_unknown(self):
+        mock_req = MagicMock()
+        mock_req.params.name = "herramienta_falsa"
+        mock_req.params.arguments = {"instruction": "test"}
+        
         with pytest.raises(ValueError, match="Herramienta desconocida"):
-            await handle_call_tool("herramienta_falsa", {"instruction": "test"})
+            await handle_call_tool(mock_req)
 
     @pytestmark_unit
     @pytest.mark.asyncio
     async def test_handle_list_tools(self):
-        tools = await handle_list_tools()
-        assert len(tools) == 1
-        assert tools[0].name == "delegar_a_opencode"
+        mock_req = MagicMock()
+        resultado = await handle_list_tools(mock_req)
+        
+        assert len(resultado.tools) == 1
+        assert resultado.tools[0].name == "delegar_a_opencode"
 
     @pytestmark_unit
     def test_mcp_server_registration(self):
         """Verifica que el servidor subyacente se instanció correctamente."""
         assert mcp_server.name == "acp-orchestrator"
+
+    @pytestmark_unit
+    @pytest.mark.asyncio
+    async def test_handle_call_tool_request_invalido(self):
+        """Cubre la rama donde el request es None o no tiene el atributo params."""
+        resultado = await handle_call_tool(None)
+        
+        assert resultado.is_error is True
+        assert len(resultado.content) == 0
+
+    @pytestmark_unit
+    @pytest.mark.asyncio
+    async def test_handle_call_tool_sin_instruccion(self):
+        """Cubre la rama donde los argumentos no incluyen la instrucción obligatoria."""
+        mock_req = MagicMock()
+        mock_req.params.name = "delegar_a_opencode"
+        mock_req.params.arguments = {}  # Diccionario vacío sin 'instruction'
+        
+        with pytest.raises(ValueError, match="La instrucción es obligatoria"):
+            await handle_call_tool(mock_req)
+
 
 # ==========================================
 # 2. PRUEBAS DE INTEGRACIÓN (Requieren entorno Docker / Red real)

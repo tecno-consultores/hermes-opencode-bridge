@@ -1,0 +1,12 @@
+services:
+  acp-orchestrator:
+    # 1. Usamos tu imagen de QA en lugar de la imagen de producción sin compilar
+    image: sinfallas/base-python-uv:3.13
+    
+    # 2. Montamos el código local (Docker Compose unirá esto con el volumen del socket que ya tienes)
+    volumes:
+      - .:/app
+    working_dir: /app
+    
+    # 3. Instalamos e iniciamos en modo reload
+    command: bash -c "uv pip install --system -e '.[dev]' && uvicorn acp_api:app --host 0.0.0.0 --port 8000 --reload"
