@@ -43,3 +43,6 @@ dev = [
 
 [tool.setuptools]
 py-modules = ["acp_api"]
+
+[tool.mutmut]
+source_paths = "acp_api.py"

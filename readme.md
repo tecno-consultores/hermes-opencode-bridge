@@ -89,13 +89,18 @@ docker compose -f docker-compose.qa.yml run --rm test bash -c "uv pip install --
 **Fase 2: Seguridad y Análisis Estático (SAST)**
 Escanea el árbol de dependencias buscando vulnerabilidades (CVEs) con `pip-audit` y audita el código fuente buscando patrones inseguros de Python con `bandit`:
 ```bash
-docker compose -f docker-compose.qa.yml run --rm test bash -c "uv pip install --system -e '.[dev]' && pip-audit --skip pip && bandit -r acp_api.py"
+docker compose -f docker-compose.qa.yml run --rm test bash -c "uv pip install --system -U pip && uv pip install --system -e '.[dev]' && pip-audit && bandit -r acp_api.py"
 ```
 
 **Fase 3: Pruebas de Mutación**
 Evalúa la robustez de la suite de pruebas inyectando fallos artificiales en el código base mediante `mutmut`, garantizando que no existan falsos positivos en el reporte de cobertura:
 ```bash
-docker compose -f docker-compose.qa.yml run --rm test bash -c "uv pip install --system -e '.[dev]' pytest-timeout && rm -f .mutmut-cache && mutmut run"
+docker compose -f docker-compose.qa.yml run --rm test bash -c "uv pip install --system -e '.[dev]' && pytest --cov=acp_api && rm -f .mutmut-cache && mutmut run"
+```
+
+para ver el resultado de las pruebas de mutacion:
+```bash
+docker compose -f docker-compose.qa.yml run --rm test bash -c "uv pip install --system -e '.[dev]' && mutmut results"
 ```
 
 **Fase 4: Pruebas de Estrés y Carga**

@@ -1,7 +1,7 @@
 x-opencode-base: &opencode-base
     image: ghcr.io/anomalyco/opencode:latest
     hostname: opencode
-    container_name: opencode  # Fijado a 'opencode' para hacer match con el código Python
+    container_name: opencode
     pull_policy: ${pull_policy}
     restart: ${restart}
     stdin_open: true

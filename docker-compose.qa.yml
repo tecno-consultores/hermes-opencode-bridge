@@ -2,7 +2,8 @@ services:
   api:
     image: sinfallas/base-python-uv:3.13
     container_name: acp_qa_api
-    hostname: qa_api
+    hostname: acp_qa_api
+    pull_policy: always
     environment:
       TZ: 'America/Caracas'
       HERMES_API_KEY: ${HERMES_API_KEY:-"fake_test_key"}

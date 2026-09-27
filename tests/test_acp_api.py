@@ -83,6 +83,32 @@ class TestUnitariasAcpApi:
         decision, _ = await consultar_hermes({"accion": "test"})
         assert decision == "approved"
 
+    @pytestmark_unit
+    @pytest.mark.asyncio
+    @patch("acp_api.httpx.AsyncClient")
+    async def test_consultar_hermes_usa_url_por_defecto(self, mock_httpx_client, monkeypatch):
+        """Verifica que el orquestador use la URL por defecto si no está definida en el entorno."""
+        # 1. Forzamos la eliminación de la variable de entorno
+        monkeypatch.delenv("HERMES_API_URL", raising=False)
+        monkeypatch.setenv("HERMES_API_KEY", "test_key")
+
+        # 2. Configuramos el mock para que responda correctamente
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "choices": [{"message": {"content": '{"decision": "approved", "suggestion": ""}'}}]
+        }
+        
+        mock_client_instance = AsyncMock()
+        mock_client_instance.post.return_value = mock_response
+        mock_httpx_client.return_value.__aenter__.return_value = mock_client_instance
+
+        # 3. Ejecutamos la función
+        await consultar_hermes({"accion": "test"})
+        
+        # 4. Comprobamos que el primer argumento posicional (la URL) es el fallback esperado
+        url_usada = mock_client_instance.post.call_args[0][0]
+        assert url_usada == "http://hermes:8642/v1/chat/completions"
+
     # --- Pruebas del Controlador JSON-RPC (OpenCodeRPCController) ---
 
     @pytestmark_unit
