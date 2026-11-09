@@ -126,3 +126,6 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml logs -f acp-orche
 ```
 
 Obtener la imagen en Docker Hub: https://hub.docker.com/r/sinfallas/hermes-opencode-bridge
+
+
+Copyright (C) 2026 Jesus Palencia <sinfallas@gmail.com> (Creado en Tecno Consultores)
