@@ -1,0 +1,73 @@
+# SPDX-License-Identifier: GPL-2.0-only
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+    tags: ["v*"]
+  pull_request:
+    branches: [main, develop]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  qa:
+    name: Lint, tipos y pruebas (tox py3.10-3.14)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: UID del runner para el contenedor sin root
+        run: echo "HOST_UID=$(id -u)" >> "$GITHUB_ENV" && echo "HOST_GID=$(id -g)" >> "$GITHUB_ENV"
+      - name: tox en contenedor efímero
+        run: docker compose -f docker-compose.qa.yml run --rm test ./scripts/qa.sh tox
+      - name: SAST (bandit + pip-audit)
+        run: docker compose -f docker-compose.qa.yml run --rm test ./scripts/qa.sh sast
+      - name: Mutación en paralelo (MSI >= 80 %)
+        run: docker compose -f docker-compose.qa.yml run --rm test ./scripts/qa.sh mutation
+      - name: Limpieza
+        if: always()
+        run: docker compose -f docker-compose.qa.yml down -v --remove-orphans
+
+  image:
+    name: Build, smoke test y Trivy de la imagen
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          push: false
+          tags: hermes-opencode-bridge:ci
+          build-args: BUILD_DATE=${{ github.event.head_commit.timestamp }}
+      - name: Smoke test (importa la app, usuario no root y /health)
+        run: |
+          docker run --rm hermes-opencode-bridge:ci python -c "import acp_api; print(acp_api.__version__)"
+          test "$(docker run --rm hermes-opencode-bridge:ci id -u)" != "0"
+          docker run -d --name smoke -e ACP_API_KEY=ci-token-0123456789abcdef hermes-opencode-bridge:ci
+          for i in $(seq 1 20); do docker exec smoke curl -fsS http://127.0.0.1:8000/health && break; sleep 1; done
+          test "$(docker exec smoke curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/mcp/sse)" = "401"
+          docker rm -f smoke
+      - name: Trivy (imagen, HIGH/CRITICAL)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: hermes-opencode-bridge:ci
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+      - name: Trivy (Dockerfile y compose)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: config
+          scan-ref: .
+          severity: HIGH,CRITICAL
+          exit-code: "1"

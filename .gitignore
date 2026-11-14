@@ -1,28 +1,27 @@
 .idea/
+.vscode/
 .buildx-cache/
 .env
+.env.*
+!env.example
 
-# Terraform
-.terraform/
-.terraform.lock.hcl
-*.tfstate
-*.tfstate.backup
-*.tfvars
-*.tfvars.json
-override.tf
-override.tf.json
-*_override.tf
-*_override.tf.json
+# Workspace de OpenCode montado por docker-compose.yml
+opencode-workspace/
+
+# Grafo AST local (Graphify)
+graphify-out/
 
 # Artefactos de Python, Pruebas y Cobertura
 __pycache__/
 *.py[cod]
 *$py.class
+.venv/
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
 .tox/
 .coverage
+.coverage.*
 htmlcov/
 coverage.xml
 .mutmut-cache
