@@ -48,26 +48,28 @@ jobs:
           load: true
           push: false
           tags: hermes-opencode-bridge:ci
-          build-args: BUILD_DATE=${{ github.event.head_commit.timestamp }}
+          build-args: BUILD_DATE=${{ github.event.head_commit.timestamp || github.event.pull_request.updated_at }}
       - name: Smoke test (importa la app, usuario no root y /health)
         run: |
           docker run --rm hermes-opencode-bridge:ci python -c "import acp_api; print(acp_api.__version__)"
           test "$(docker run --rm hermes-opencode-bridge:ci id -u)" != "0"
+          trap 'docker rm -f smoke >/dev/null 2>&1 || true' EXIT
           docker run -d --name smoke -e ACP_API_KEY=ci-token-0123456789abcdef hermes-opencode-bridge:ci
           for i in $(seq 1 20); do docker exec smoke curl -fsS http://127.0.0.1:8000/health && break; sleep 1; done
+          docker exec smoke curl -fsS http://127.0.0.1:8000/health
           test "$(docker exec smoke curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/mcp/sse)" = "401"
-          docker rm -f smoke
       - name: Trivy (imagen, HIGH/CRITICAL)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: hermes-opencode-bridge:ci
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           exit-code: "1"
       - name: Trivy (Dockerfile y compose)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: config
           scan-ref: .
+          skip-dirs: .cache
           severity: HIGH,CRITICAL
           exit-code: "1"

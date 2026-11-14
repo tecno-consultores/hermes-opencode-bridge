@@ -16,4 +16,5 @@ Status: COMPLETED (100%)
 - [x] Docs: readme, CHANGELOG.md, SECURITY.md, CONTRIBUTING.md, AGENTS.md
 - [x] Gobernanza: CI, Dependabot, CODEOWNERS, plantillas, .editorconfig, .dockerignore, .gitignore, SPDX
 - [x] Grafo AST actualizado (graphify-out/, ignorado por git)
-- [ ] git push (pendiente de autorización del usuario)
+- [x] git push
+- [x] Hotfix CI: aquasecurity/trivy-action fijado a SHA v0.36.0

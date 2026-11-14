@@ -8,6 +8,9 @@ lugar: `__version__` en `acp_api.py` (leída dinámicamente por `pyproject.toml`
 
 ## [Unreleased]
 
+### Corregido
+- **CI (GitHub Actions)**: se fija `aquasecurity/trivy-action` por SHA de commit (`v0.36.0`, las etiquetas sin prefijo `v` como `0.28.0` fueron retiradas por Aqua Security) y se refuerzan `BUILD_DATE` en `pull_request` y el *smoke test*.
+
 ## [1.6.0] - 2026-11-14
 
 ### Seguridad
