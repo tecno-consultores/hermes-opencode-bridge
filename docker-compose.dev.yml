@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: GPL-2.0-only
+# Override de desarrollo: construye la imagen local y monta el código fuente con recarga automática.
+#   docker compose --env-file .env -f docker-compose.yml -f docker-compose.dev.yml --profile acp-orchestrator up -d --build
+services:
+  acp-orchestrator:
+    build: .
+    image: sinfallas/hermes-opencode-bridge:dev
+    pull_policy: build
+    volumes:
+      - ./acp_api.py:/app/acp_api.py:ro
+    command: ["uvicorn", "acp_api:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--no-access-log"]

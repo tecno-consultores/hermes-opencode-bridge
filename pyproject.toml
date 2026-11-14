@@ -1,0 +1,100 @@
+# SPDX-License-Identifier: GPL-2.0-only
+[build-system]
+requires = ["setuptools>=77.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "acp-orchestrator"
+dynamic = ["version"]
+description = "Puente MCP <-> ACP entre Hermes (manager) y OpenCode (worker) con auditoría de seguridad fail-closed"
+readme = "readme.md"
+license = "GPL-2.0-only"
+license-files = ["LICENSE"]
+authors = [{ name = "Jesus Palencia", email = "sinfallas@gmail.com" }]
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.115,<1",
+    "starlette>=0.40",
+    "uvicorn>=0.30,<1",
+    "mcp>=2.3,<3",
+    "httpx>=0.27,<1",
+]
+
+[project.urls]
+Homepage = "https://github.com/tecno-consultores/hermes-opencode-bridge"
+Issues = "https://github.com/tecno-consultores/hermes-opencode-bridge/issues"
+Docker = "https://hub.docker.com/r/sinfallas/hermes-opencode-bridge"
+
+[project.optional-dependencies]
+dev = [
+    # Pruebas base y cobertura
+    "pytest>=8",
+    "pytest-asyncio>=0.24",
+    "pytest-mock",
+    "pytest-cov",
+    "pytest-timeout",
+    "ruff",
+    "mypy",
+    # Fase 2: SAST (Seguridad y vulnerabilidades)
+    "bandit",
+    "pip-audit",
+    # Fase 3: Mutación
+    "mutmut",
+    # Fase 4: Estrés y Carga
+    "locust",
+    # Fase 5: Contratos / Fuzzing
+    "schemathesis",
+]
+
+[tool.setuptools]
+py-modules = ["acp_api"]
+
+[tool.setuptools.dynamic]
+version = { attr = "acp_api.__version__" }
+
+# ---------------------------------------------------------------- pytest
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+markers = [
+    "integration: Pruebas de integración que requieren dependencias externas o red (ej. Hermes).",
+    "unit: Pruebas unitarias completamente aisladas (mockeadas).",
+]
+asyncio_mode = "strict"
+asyncio_default_fixture_loop_scope = "function"
+addopts = "-m 'not integration' --timeout=10 --strict-markers"
+
+# -------------------------------------------------------------- coverage
+[tool.coverage.run]
+branch = true
+source = ["acp_api"]
+
+[tool.coverage.report]
+fail_under = 95
+show_missing = true
+
+# ------------------------------------------------------------------ ruff
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "BLE", "S", "ASYNC", "UP", "SIM", "RUF", "PL"]
+ignore = ["PLR2004", "RUF001", "RUF002", "RUF003"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S105", "S106", "PLR0913", "PLC0415", "SLF001"]
+"locustfile.py" = ["S311"]
+
+# ------------------------------------------------------------------ mypy
+[tool.mypy]
+python_version = "3.10"
+strict = true
+ignore_missing_imports = true
+
+# ---------------------------------------------------------------- mutmut
+[tool.mutmut]
+source_paths = ["acp_api.py"]
+pytest_add_cli_args_test_selection = ["tests/"]
+# Los mutantes que cuelgan el agente ACP simulado deben morir rápido (la suite tarda < 1 s).
+pytest_add_cli_args = ["--timeout=2", "-p", "no:cacheprovider"]

@@ -1,0 +1,74 @@
+# SPDX-License-Identifier: GPL-2.0-only
+# Entorno de QA efímero y sin root (Rule Zero). Ejemplos:
+#   docker compose -f docker-compose.qa.yml run --rm test                      # tox (py3.10-3.14)
+#   docker compose -f docker-compose.qa.yml run --rm test ./scripts/qa.sh sast
+#   docker compose -f docker-compose.qa.yml up -d api                          # para load / fuzz
+# Use HOST_UID/HOST_GID si su usuario no es 1000:1000 (export HOST_UID=$(id -u) HOST_GID=$(id -g)).
+
+x-qa-base: &qa-base
+  image: sinfallas/base-python-uv:3.13
+  pull_policy: missing
+  user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+  environment: &qa-env
+    TZ: America/Caracas
+    HOME: /tmp
+    UV_CACHE_DIR: /cache/uv
+    UV_PYTHON_INSTALL_DIR: /cache/python
+    HERMES_API_KEY: ${HERMES_API_KEY:-fake_test_key}
+    HERMES_API_URL: ${HERMES_API_URL:-http://hermes:8642/v1/chat/completions}
+    ACP_API_KEY: ${ACP_API_KEY:-qa-token-0123456789abcdef0123456789abcdef}
+    MUTATION_SHARDS: ${MUTATION_SHARDS:-1}
+    MUTATION_CHILDREN: ${MUTATION_CHILDREN:-}
+    MUTATION_MIN_MSI: ${MUTATION_MIN_MSI:-80}
+  volumes:
+    - .:/app
+    - qa-cache:/cache
+  working_dir: /app
+  networks:
+    - qa-net
+  depends_on:
+    qa-init:
+      condition: service_completed_successfully
+
+services:
+  # Desbloquea el volumen de caché (creado como root) para el UID no privilegiado.
+  qa-init:
+    image: sinfallas/base-python-uv:3.13
+    pull_policy: missing
+    user: "0:0"
+    volumes:
+      - qa-cache:/cache
+    command: ["sh", "-c", "mkdir -p /cache/uv /cache/python && chmod -R a+rwX /cache"]
+    networks:
+      - qa-net
+
+  api:
+    <<: *qa-base
+    container_name: acp_qa_api
+    hostname: api
+    environment:
+      <<: *qa-env
+      ACP_ENABLE_DOCS: "true"  # expone /openapi.json para la fase de fuzzing
+    command: bash -c "uv venv -q /tmp/venv && VIRTUAL_ENV=/tmp/venv uv pip install -q -e . && /tmp/venv/bin/uvicorn acp_api:app --host 0.0.0.0 --port 8000"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/health"]
+      start_period: 60s
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  test:
+    <<: *qa-base
+    container_name: acp_api_test
+    hostname: test_runner
+    environment:
+      <<: *qa-env
+      UV_PYTHON_DOWNLOADS: automatic
+    command: ["./scripts/qa.sh", "tox"]
+
+networks:
+  qa-net:
+    driver: bridge
+
+volumes:
+  qa-cache:

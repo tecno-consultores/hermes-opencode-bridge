@@ -1,0 +1,5 @@
+# Contexto mínimo de build: solo lo que copia el Dockerfile.
+*
+!acp_api.py
+!pyproject.toml
+!uv.lock
