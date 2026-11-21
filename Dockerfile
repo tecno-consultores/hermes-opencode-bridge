@@ -6,7 +6,7 @@
 ARG DOCKER_CLI_IMAGE=docker:29-cli
 FROM ${DOCKER_CLI_IMAGE} AS docker-cli
 
-FROM sinfallas/base-python-uv:3.13
+FROM sinfallas/base-python-uv:3.15
 LABEL org.opencontainers.image.authors="Jesus Palencia <sinfallas@gmail.com> (Creado en Tecno Consultores)" \
       org.opencontainers.image.title="hermes-opencode-bridge" \
       org.opencontainers.image.description="Puente MCP <-> ACP entre Hermes y OpenCode con auditoría de seguridad fail-closed" \
